@@ -1,0 +1,127 @@
+generator client {
+ provider = "prisma-client-js"
+}
+datasource db {
+ provider = "postgresql"
+ url = env("DATABASE_URL")
+}
+enum UserStatus { PENDING ACTIVE SUSPENDED CLOSED }
+enum CampaignStatus { DRAFT PENDING_REVIEW APPROVED SCHEDULED OPEN TARGET_REACHED CLOSING AWAITING_SETTLEMENT DRAW_IN_PROGRESS WINNER_VERIFICATION AWARDED CANCELLED REFUND_PROCESSING REFUNDED DISPUTED }
+enum CampaignEntryMode { FREE PAID BOTH }
+enum SettlementPolicy { REFUND EXTEND_IF_PREAUTHORIZED AWARD_DISCLOSED_POOL OTHER_AUTHORIZED }
+enum LedgerAccountType { USER_AVAILABLE USER_PENDING USER_WITHDRAWABLE CAMPAIGN_RESTRICTED REWARD_POINTS XP PROMOTIONAL }
+enum LedgerEntryStatus { PENDING POSTED REVERSED }
+enum GameKind { QUIZ REACTION MEMORY WORD PUZZLE CHALLENGE }
+model User {
+ id String @id @default(cuid())
+ phoneE164 String? @unique
+ email String? @unique
+ displayName String
+ status UserStatus @default(PENDING)
+ dateOfBirth DateTime?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ entries CampaignEntry[]
+ ledger LedgerEntry[]
+ attempts GameAttempt[]
+ auditEvents AuditEvent[] @relation("ActorEvents")
+}
+model Campaign {
+ id String @id @default(cuid())
+ slug String @unique
+ title String
+ description String
+ prizeTitle String
+ prizeValueMinor BigInt?
+ currency String @default("NGN")
+ entryMode CampaignEntryMode
+ entryPriceMinor BigInt @default(0)
+ targetMinor BigInt
+ raisedMinor BigInt @default(0)
+ startsAt DateTime
+ endsAt DateTime
+ status CampaignStatus @default(DRAFT)
+ settlementPolicy SettlementPolicy
+ settlementDisclosure String
+ winnerMethod String
+ rulesVersion Int @default(1)
+ rulesSnapshot Json
+ approvedAt DateTime?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ entries CampaignEntry[]
+}
+model CampaignEntry {
+ id String @id @default(cuid())
+ campaignId String
+ userId String
+ paymentReference String? @unique
+ eligibilitySnapshot Json
+ status String @default("ELIGIBLE")
+ createdAt DateTime @default(now())
+ campaign Campaign @relation(fields:[campaignId], references:[id])
+ user User @relation(fields:[userId], references:[id])
+ @@index([campaignId, userId])
+}
+model LedgerEntry {
+ id String @id @default(cuid())
+ transactionGroupId String
+ userId String?
+ account LedgerAccountType
+ amountMinor BigInt
+ currency String @default("NGN")
+ status LedgerEntryStatus @default(PENDING)
+ idempotencyKey String @unique
+ reference String?
+ metadata Json?
+ createdAt DateTime @default(now())
+ postedAt DateTime?
+ user User? @relation(fields:[userId], references:[id])
+ @@index([transactionGroupId])
+ @@index([userId, createdAt])
+}
+model GameAttempt {
+ id String @id @default(cuid())
+ userId String
+ kind GameKind
+ gameVersion String
+ score Int
+ xpAwarded Int @default(0)
+ answerSnapshot Json
+ verifiedAt DateTime?
+ createdAt DateTime @default(now())
+ user User @relation(fields:[userId], references:[id])
+ @@index([userId, createdAt])
+}
+model Reward {
+ id String @id @default(cuid())
+ name String
+ description String
+ pointsCost Int
+ inventory Int?
+ active Boolean @default(false)
+ fulfillmentMode String
+ createdAt DateTime @default(now())
+}
+model RewardRedemption {
+ id String @id @default(cuid())
+ userId String
+ rewardId String
+ pointsCost Int
+ status String @default("PENDING")
+ idempotencyKey String @unique
+ createdAt DateTime @default(now())
+}
+model AuditEvent {
+ id String @id @default(cuid())
+ actorUserId String?
+ action String
+ entityType String
+ entityId String
+ before Json?
+ after Json?
+ reason String?
+ createdAt DateTime @default(now())
+ actor User? @relation("ActorEvents", fields:[actorUserId], references:[id])
+ @@index([entityType, entityId, createdAt])
+}
